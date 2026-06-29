@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>搜索</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      padding-top: 80px;
+      min-height: 100vh;
+    }
+    .container { width: 500px; }
+    .search-box {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box:focus { border-color: #4a90d9; }
+    .result {
+      margin-top: 20px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+    .result-line {
+      padding: 4px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .result-line:last-child { border-bottom: none; }
+    .label { color: #888; margin-right: 8px; }
+    .value { color: #333; font-weight: 500; }
+    .no-result {
+      margin-top: 20px;
+      color: #999;
+      text-align: center;
+    }
+    .hl {
+      background: #ffd54f;
+      color: #333;
+      padding: 0 1px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <input type="text" class="search-box" id="searchInput" placeholder="请输入名字" autofocus>
+    <div id="resultArea"></div>
+  </div>
+  <script>
+    let data = [];
+
+    const input = document.getElementById('searchInput');
+    const resultArea = document.getElementById('resultArea');
+
+    function getMatchedIndices(name, query) {
+      const indices = [];
+      let qi = 0;
+      for (let ni = 0; ni < name.length && qi < query.length; ni++) {
+        if (name[ni] === query[qi]) {
+          indices.push(ni);
+          qi++;
+        }
+      }
+      return qi === query.length ? indices : null;
+    }
+
+    function highlightName(name, indices) {
+      if (!indices || indices.length === 0) return name;
+      let result = '';
+      const set = new Set(indices);
+      for (let i = 0; i < name.length; i++) {
+        if (set.has(i)) {
+          result += '<mark class="hl">' + name[i] + '</mark>';
+        } else {
+          result += name[i];
+        }
+      }
+      return result;
+    }
+
+    function search(query) {
+      resultArea.innerHTML = '';
+      if (!query) return;
+      const matchedItems = [];
+      for (const item of data) {
+        const indices = getMatchedIndices(item.name, query);
+        if (indices) matchedItems.push({ item, indices });
+      }
+      if (matchedItems.length === 0) {
+        resultArea.innerHTML = '<div class="no-result">未找到匹配结果</div>';
+        return;
+      }
+      const div = document.createElement('div');
+      div.className = 'result';
+      matchedItems.forEach(({ item, indices }) => {
+        div.innerHTML += `<div class="result-line"><span class="label">名称</span><span class="value">${highlightName(item.name, indices)}</span></div>`;
+        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">${item.x},${item.y}</span></div>`;
+      });
+      resultArea.appendChild(div);
+    }
+
+    // 从 JSON 文件加载数据
+    fetch('live_fmtB_full.json')
+      .then(res => res.json())
+      .then(json => {
+        data = json;
+      })
+      .catch(err => {
+        resultArea.innerHTML = '<div class="no-result">数据加载失败: ' + err.message + '</div>';
+      });
+
+    // 实时搜索
+    input.addEventListener('input', () => search(input.value.trim()));
+  </script>
+</body>
+</html>
