@@ -11,10 +11,39 @@
       background: #f5f5f5;
       display: flex;
       justify-content: center;
-      padding-top: 80px;
+      padding-top: 60px;
       min-height: 100vh;
     }
-    .container { width: 500px; }
+    .container { width: 520px; }
+
+    /* === Tabs === */
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #ddd;
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      background: transparent;
+      font-size: 15px;
+      cursor: pointer;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: #555; }
+    .tab.active {
+      color: #4a90d9;
+      border-bottom-color: #4a90d9;
+      font-weight: 600;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* === Shared === */
     .search-box {
       width: 100%;
       padding: 12px 16px;
@@ -52,19 +81,105 @@
       padding: 0 1px;
       border-radius: 2px;
     }
+
+    /* === Tab 2: Filter row === */
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .union-select {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+      background: #fff;
+      cursor: pointer;
+    }
+    .union-select:focus { border-color: #4a90d9; }
+    .coord-input {
+      width: 100px;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+    }
+    .coord-input:focus { border-color: #4a90d9; }
+    .search-btn {
+      padding: 10px 20px;
+      font-size: 15px;
+      background: #4a90d9;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .search-btn:hover { background: #357abd; }
   </style>
 </head>
 <body>
   <div class="container">
-    <input type="text" class="search-box" id="searchInput" placeholder="请输入名字" autofocus>
-    <div id="resultArea"></div>
+
+    <!-- Tab Bar -->
+    <div class="tabs">
+      <button class="tab active" data-tab="person">找个人</button>
+      <button class="tab" data-tab="enemy">找个最近的敌对创飞</button>
+    </div>
+
+    <!-- Tab 1: 找个人 -->
+    <div id="tab-person" class="tab-content active">
+      <input type="text" class="search-box" id="searchInput" placeholder="请输入名字" autofocus>
+      <div id="resultArea"></div>
+    </div>
+
+    <!-- Tab 2: 找个最近的敌对创飞 -->
+    <div id="tab-enemy" class="tab-content">
+      <div class="filter-row">
+        <select id="enemyUnionSelect" class="union-select">
+          <option value="">请选择盟</option>
+        </select>
+        <input type="number" id="targetX" class="coord-input" placeholder="X">
+        <input type="number" id="targetY" class="coord-input" placeholder="Y">
+        <button id="enemySearchBtn" class="search-btn">搜索</button>
+      </div>
+      <div id="enemyResultArea"></div>
+    </div>
+
   </div>
+
   <script>
     let data = [];
+    let unionMap = {};          // union_id → 盟名 (e.g. "0" → "盟0")
 
-    const input = document.getElementById('searchInput');
+    // === DOM refs ===
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = {
+      person: document.getElementById('tab-person'),
+      enemy: document.getElementById('tab-enemy'),
+    };
+    const searchInput = document.getElementById('searchInput');
     const resultArea = document.getElementById('resultArea');
+    const enemyUnionSelect = document.getElementById('enemyUnionSelect');
+    const targetX = document.getElementById('targetX');
+    const targetY = document.getElementById('targetY');
+    const enemySearchBtn = document.getElementById('enemySearchBtn');
+    const enemyResultArea = document.getElementById('enemyResultArea');
 
+    // === Tab switching ===
+    function switchTab(name) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      tabContents.person.classList.toggle('active', name === 'person');
+      tabContents.enemy.classList.toggle('active', name === 'enemy');
+      if (name === 'person') searchInput.focus();
+    }
+    tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+    // === Common helpers ===
     function getMatchedIndices(name, query) {
       const indices = [];
       let qi = 0;
@@ -91,39 +206,147 @@
       return result;
     }
 
-    function search(query) {
+    function getUnionName(item) {
+      if (item.union_id === null || item.union_id === undefined)
+        return unionMap['__null__'] || '无';
+      return unionMap[String(item.union_id)] || '未知';
+    }
+
+    // === Tab 1: 找个人 ===
+    function searchPerson(query) {
       resultArea.innerHTML = '';
       if (!query) return;
+
       const matchedItems = [];
       for (const item of data) {
         const indices = getMatchedIndices(item.name, query);
         if (indices) matchedItems.push({ item, indices });
       }
+
       if (matchedItems.length === 0) {
         resultArea.innerHTML = '<div class="no-result">未找到匹配结果</div>';
         return;
       }
+
       const div = document.createElement('div');
       div.className = 'result';
-      matchedItems.forEach(({ item, indices }) => {
+      div.innerHTML = `<div style="margin-bottom:10px;color:#666;font-size:14px;">搜索结果（共${matchedItems.length}人）</div>`;
+
+      for (let i = 0; i < matchedItems.length; i++) {
+        const { item, indices } = matchedItems[i];
+        const uname = getUnionName(item);
+        if (i > 0) {
+          div.innerHTML += `<div style="height:1px;background:#eee;margin:6px 0;"></div>`;
+        }
         div.innerHTML += `<div class="result-line"><span class="label">名称</span><span class="value">${highlightName(item.name, indices)}</span></div>`;
-        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">${item.x},${item.y}</span></div>`;
-      });
+        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">(${item.x},${item.y})</span></div>`;
+        div.innerHTML += `<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`;
+      }
+
       resultArea.appendChild(div);
     }
 
-    // 从 JSON 文件加载数据
-    fetch('il_capture.json')
+    searchInput.addEventListener('input', () => searchPerson(searchInput.value.trim()));
+
+    // === Tab 2: 找个最近的敌对创飞 ===
+    function populateUnionSelect() {
+      const sorted = Object.entries(unionMap)
+        .filter(([k]) => k !== '__null__')
+        .sort((a, b) => {
+          const na = parseInt(a[1].replace('盟', ''), 10);
+          const nb = parseInt(b[1].replace('盟', ''), 10);
+          return (isNaN(na) ? -1 : na) - (isNaN(nb) ? -1 : nb);
+        });
+      enemyUnionSelect.innerHTML = '<option value="">请选择盟</option>';
+      enemyUnionSelect.innerHTML += '<option value="__null__">无</option>';
+      for (const [uid, name] of sorted) {
+        enemyUnionSelect.innerHTML += `<option value="${uid}">${name}</option>`;
+      }
+    }
+
+   function searchEnemy() {
+      enemyResultArea.innerHTML = '';
+      const unionKey = enemyUnionSelect.value;
+      const x = parseFloat(targetX.value);
+      const y = parseFloat(targetY.value);
+
+      if (!unionKey) {
+        enemyResultArea.innerHTML = '<div class="no-result">请选择一个盟</div>';
+        return;
+      }
+      let candidates, hasCoord;
+      hasCoord = !isNaN(x) && !isNaN(y);
+
+      if (unionKey === '__null__') {
+        candidates = data.filter(d => d.union_id === null);
+      } else {
+        candidates = data.filter(d => String(d.union_id) === unionKey);
+      }
+
+      if (candidates.length === 0) {
+        enemyResultArea.innerHTML = '<div class="no-result">该盟没有找到人</div>';
+        return;
+      }
+
+      let resultData;
+      if (hasCoord) {
+        resultData = candidates.map(d => ({
+          ...d,
+          dist: Math.sqrt((d.x - x) ** 2 + (d.y - y) ** 2),
+        }));
+        resultData.sort((a, b) => a.dist - b.dist);
+      } else {
+        resultData = candidates.map(d => ({ ...d, dist: null }));
+      }
+
+      const uname = unionKey === '__null__' ? '无' : (unionMap[unionKey] || '未知');
+      const subtitle = hasCoord ? `（共${resultData.length}人，按距离排序）` : `（共${resultData.length}人）`;
+
+      const div = document.createElement('div');
+      div.className = 'result';
+      div.innerHTML = `<div style="margin-bottom:10px;color:#666;font-size:14px;">${uname}${subtitle}</div>`;
+
+      for (let i = 0; i < resultData.length; i++) {
+        const d = resultData[i];
+        if (i > 0) {
+          div.innerHTML += `<div style="height:1px;background:#eee;margin:6px 0;"></div>`;
+        }
+        div.innerHTML += `<div class="result-line"><span class="label">名称</span><span class="value">${d.name}</span></div>`;
+        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">(${d.x},${d.y})</span></div>`;
+        if (hasCoord) {
+          div.innerHTML += `<div class="result-line"><span class="label">距离</span><span class="value">${d.dist.toFixed(1)}</span></div>`;
+        }
+        div.innerHTML += `<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`;
+      }
+
+      enemyResultArea.appendChild(div);
+    }
+
+    enemySearchBtn.addEventListener('click', searchEnemy);
+    targetX.addEventListener('keydown', e => { if (e.key === 'Enter') searchEnemy(); });
+    targetY.addEventListener('keydown', e => { if (e.key === 'Enter') searchEnemy(); });
+
+    // === Data loading ===
+    fetch('union_id.json')
       .then(res => res.json())
       .then(json => {
-        data = json;
+        for (const [uid, name] of Object.entries(json)) {
+          if (uid === 'null') {
+            unionMap['__null__'] = name;
+          } else {
+            unionMap[uid] = name;
+          }
+        }
+        populateUnionSelect();
       })
+      .catch(err => console.error('联盟数据加载失败:', err));
+
+    fetch('il_capture.json')
+      .then(res => res.json())
+      .then(json => { data = json; })
       .catch(err => {
         resultArea.innerHTML = '<div class="no-result">数据加载失败: ' + err.message + '</div>';
       });
-
-    // 实时搜索
-    input.addEventListener('input', () => search(input.value.trim()));
   </script>
 </body>
 </html>
