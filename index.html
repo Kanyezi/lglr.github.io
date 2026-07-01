@@ -228,22 +228,24 @@
         return;
       }
 
-      const div = document.createElement('div');
-      div.className = 'result';
-      div.innerHTML = `<div style="margin-bottom:10px;color:#666;font-size:14px;">搜索结果（共${matchedItems.length}人）</div>`;
+     const div = document.createElement('div');
+     div.className = 'result';
+      const htmlParts = [`<div style="margin-bottom:10px;color:#666;font-size:14px;">搜索结果（共${matchedItems.length}人）</div>`];
 
-      for (let i = 0; i < matchedItems.length; i++) {
-        const { item, indices } = matchedItems[i];
-        const uname = getUnionName(item);
-        if (i > 0) {
-          div.innerHTML += `<div style="height:1px;background:#eee;margin:6px 0;"></div>`;
-        }
-        div.innerHTML += `<div class="result-line"><span class="label">名称</span><span class="value">${highlightName(item.name, indices)}</span></div>`;
-        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">(${item.x},${item.y})</span></div>`;
-        div.innerHTML += `<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`;
-      }
+     for (let i = 0; i < matchedItems.length; i++) {
+       const { item, indices } = matchedItems[i];
+       const uname = getUnionName(item);
+       if (i > 0) {
+          htmlParts.push(`<div style="height:1px;background:#eee;margin:6px 0;"></div>`);
+       }
+        htmlParts.push(`<div class="result-line"><span class="label">名称</span><span class="value">${highlightName(item.name, indices)}</span></div>`);
+        htmlParts.push(`<div class="result-line"><span class="label">坐标</span><span class="value">(${item.x},${item.y})</span></div>`);
+        htmlParts.push(`<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`);
+     }
 
-      resultArea.appendChild(div);
+      div.innerHTML = htmlParts.join('');
+
+     resultArea.appendChild(div);
     }
 
     searchInput.addEventListener('input', () => searchPerson(searchInput.value.trim()));
@@ -302,24 +304,26 @@
       const uname = unionKey === '__null__' ? '无' : (unionMap[unionKey] || '未知');
       const subtitle = hasCoord ? `（共${resultData.length}人，按距离排序）` : `（共${resultData.length}人）`;
 
-      const div = document.createElement('div');
-      div.className = 'result';
-      div.innerHTML = `<div style="margin-bottom:10px;color:#666;font-size:14px;">${uname}${subtitle}</div>`;
+     const div = document.createElement('div');
+     div.className = 'result';
+      const htmlParts = [`<div style="margin-bottom:10px;color:#666;font-size:14px;">${uname}${subtitle}</div>`];
 
       for (let i = 0; i < resultData.length; i++) {
-        const d = resultData[i];
-        if (i > 0) {
-          div.innerHTML += `<div style="height:1px;background:#eee;margin:6px 0;"></div>`;
-        }
-        div.innerHTML += `<div class="result-line"><span class="label">名称</span><span class="value">${d.name}</span></div>`;
-        div.innerHTML += `<div class="result-line"><span class="label">坐标</span><span class="value">(${d.x},${d.y})</span></div>`;
-        if (hasCoord) {
-          div.innerHTML += `<div class="result-line"><span class="label">距离</span><span class="value">${d.dist.toFixed(1)}</span></div>`;
-        }
-        div.innerHTML += `<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`;
-      }
+       const d = resultData[i];
+       if (i > 0) {
+          htmlParts.push(`<div style="height:1px;background:#eee;margin:6px 0;"></div>`);
+       }
+        htmlParts.push(`<div class="result-line"><span class="label">名称</span><span class="value">${d.name}</span></div>`);
+        htmlParts.push(`<div class="result-line"><span class="label">坐标</span><span class="value">(${d.x},${d.y})</span></div>`);
+       if (hasCoord) {
+          htmlParts.push(`<div class="result-line"><span class="label">距离</span><span class="value">${d.dist.toFixed(1)}</span></div>`);
+       }
+        htmlParts.push(`<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`);
+     }
 
-      enemyResultArea.appendChild(div);
+      div.innerHTML = htmlParts.join('');
+
+     enemyResultArea.appendChild(div);
     }
 
     enemySearchBtn.addEventListener('click', searchEnemy);
