@@ -212,6 +212,33 @@
       return unionMap[String(item.union_id)] || '未知';
     }
 
+    function normalizeUniqueMatchRow(row) {
+      const secondValue = String(row[1] ?? '');
+      const coordDigits = secondValue.replace(/\D/g, '').slice(-9).padStart(9, '0');
+      const x = parseInt(coordDigits.slice(1, 5), 10);
+      const y = parseInt(coordDigits.slice(5, 9), 10);
+
+      return {
+        x: Number.isNaN(x) ? null : x,
+        y: Number.isNaN(y) ? null : y,
+        name: row[8] ?? '',
+        union_id: row[33] ?? null,
+      };
+    }
+
+    function parseUniqueMatches(text) {
+      return text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const normalized = line.replace(/^\(/, '[').replace(/\)$/, ']');
+          const row = Function(`return ${normalized};`)();
+          return normalizeUniqueMatchRow(row);
+        })
+        .filter(item => item.name);
+    }
+
     // === Tab 1: 找个人 ===
     function searchPerson(query) {
       resultArea.innerHTML = '';
@@ -252,6 +279,7 @@
 
     // === Tab 2: 找个最近的敌对创飞 ===
     function populateUnionSelect() {
+      const hasNullUnion = data.some(d => d.union_id === null || d.union_id === undefined);
       const sorted = Object.entries(unionMap)
         .filter(([k]) => k !== '__null__')
         .sort((a, b) => {
@@ -260,7 +288,9 @@
           return (isNaN(na) ? -1 : na) - (isNaN(nb) ? -1 : nb);
         });
       enemyUnionSelect.innerHTML = '<option value="">请选择盟</option>';
-      enemyUnionSelect.innerHTML += '<option value="__null__">无</option>';
+      if (hasNullUnion) {
+        enemyUnionSelect.innerHTML += '<option value="__null__">无（空）</option>';
+      }
       for (const [uid, name] of sorted) {
         enemyUnionSelect.innerHTML += `<option value="${uid}">${name}</option>`;
       }
@@ -345,9 +375,12 @@
       })
       .catch(err => console.error('联盟数据加载失败:', err));
 
-    fetch('il_capture.json')
-      .then(res => res.json())
-      .then(json => { data = json; })
+    fetch('unique_matches.json')
+      .then(res => res.text())
+      .then(text => {
+        data = parseUniqueMatches(text);
+        populateUnionSelect();
+      })
       .catch(err => {
         resultArea.innerHTML = '<div class="no-result">数据加载失败: ' + err.message + '</div>';
       });
