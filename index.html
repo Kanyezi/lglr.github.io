@@ -75,6 +75,44 @@
       color: #999;
       text-align: center;
     }
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .result-table th,
+    .result-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #f0f0f0;
+      text-align: left;
+      vertical-align: top;
+    }
+    .result-table th {
+      color: #666;
+      font-weight: 600;
+      background: #fafafa;
+    }
+    .result-table th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .result-table th.sortable:hover {
+      background: #f2f7fd;
+    }
+    .result-table th.sort-active {
+      color: #4a90d9;
+    }
+    .sort-arrow {
+      margin-left: 4px;
+      font-size: 12px;
+      color: #4a90d9;
+    }
+    .result-table tr:last-child td { border-bottom: none; }
+    .result-table .coord,
+    .result-table .union,
+    .result-table .prosperity {
+      white-space: nowrap;
+    }
     .hl {
       background: #ffd54f;
       color: #333;
@@ -128,7 +166,7 @@
     <!-- Tab Bar -->
     <div class="tabs">
       <button class="tab active" data-tab="person">找个人</button>
-      <button class="tab" data-tab="enemy">找个最近的敌对创飞</button>
+      <button class="tab" data-tab="enemy">找个敌对创飞</button>
     </div>
 
     <!-- Tab 1: 找个人 -->
@@ -137,7 +175,7 @@
       <div id="resultArea"></div>
     </div>
 
-    <!-- Tab 2: 找个最近的敌对创飞 -->
+    <!-- Tab 2: 找个敌对创飞 -->
     <div id="tab-enemy" class="tab-content">
       <div class="filter-row">
         <select id="enemyUnionSelect" class="union-select">
@@ -155,6 +193,7 @@
   <script>
     let data = [];
     let unionMap = {};          // union_id → 盟名 (e.g. "0" → "盟0")
+    let sortState = { key: 'name', order: 'asc' };
 
     // === DOM refs ===
     const tabs = document.querySelectorAll('.tab');
@@ -206,6 +245,93 @@
       return result;
     }
 
+    function compareText(a, b) {
+      return String(a ?? '').localeCompare(String(b ?? ''), 'zh-CN', { numeric: true, sensitivity: 'base' });
+    }
+
+    function getSortTargetPoint() {
+      const x = parseFloat(targetX.value);
+      const y = parseFloat(targetY.value);
+      return {
+        x: Number.isFinite(x) ? x : 0,
+        y: Number.isFinite(y) ? y : 0,
+      };
+    }
+
+    function getDistanceToSortTarget(item) {
+      const target = getSortTargetPoint();
+      if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) return Number.POSITIVE_INFINITY;
+      return Math.sqrt((item.x - target.x) ** 2 + (item.y - target.y) ** 2);
+    }
+
+    function compareBySortState(a, b) {
+      const direction = sortState.order === 'asc' ? 1 : -1;
+      if (sortState.key === 'name') {
+        return compareText(a.name, b.name) * direction;
+      }
+      if (sortState.key === 'coord') {
+        const aMissing = !Number.isFinite(a.x) || !Number.isFinite(a.y);
+        const bMissing = !Number.isFinite(b.x) || !Number.isFinite(b.y);
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        const aDistance = getDistanceToSortTarget(a);
+        const bDistance = getDistanceToSortTarget(b);
+        if (aDistance !== bDistance) return (aDistance - bDistance) * direction;
+        return compareText(a.name, b.name);
+      }
+      if (sortState.key === 'prosperity') {
+        const aMissing = !Number.isFinite(a.prosperity);
+        const bMissing = !Number.isFinite(b.prosperity);
+        if (aMissing && bMissing) return compareText(a.name, b.name);
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        const aProsperity = a.prosperity;
+        const bProsperity = b.prosperity;
+        if (aProsperity !== bProsperity) return (aProsperity - bProsperity) * direction;
+        return compareText(a.name, b.name);
+      }
+      return compareText(a.name, b.name);
+    }
+
+    function setSortState(key) {
+      if (sortState.key === key) {
+        sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState.key = key;
+        sortState.order = 'asc';
+      }
+    }
+
+    function getSortArrow(key) {
+      if (sortState.key !== key) return '';
+      return sortState.order === 'asc' ? ' ▲' : ' ▼';
+    }
+
+    function renderTable(rows, subtitle) {
+      const sortedRows = [...rows].sort(compareBySortState);
+      const header = `
+        <thead>
+          <tr>
+            <th class="sortable ${sortState.key === 'name' ? 'sort-active' : ''}" data-sort-key="name">名称<span class="sort-arrow">${getSortArrow('name')}</span></th>
+            <th class="sortable ${sortState.key === 'coord' ? 'sort-active' : ''}" data-sort-key="coord">坐标<span class="sort-arrow">${getSortArrow('coord')}</span></th>
+            <th>联盟</th>
+            <th class="sortable ${sortState.key === 'prosperity' ? 'sort-active' : ''}" data-sort-key="prosperity">疑似繁荣<span class="sort-arrow">${getSortArrow('prosperity')}</span></th>
+          </tr>
+        </thead>
+      `;
+      const body = sortedRows.map(row => row.html).join('');
+      return `
+        <div style="margin-bottom:10px;color:#666;font-size:14px;">${subtitle}</div>
+        <table class="result-table">
+          ${header}
+          <tbody>
+            ${body}
+          </tbody>
+        </table>
+      `;
+    }
+
     function getUnionName(item) {
       if (item.union_id === null || item.union_id === undefined)
         return unionMap['__null__'] || '无';
@@ -217,12 +343,14 @@
       const coordDigits = secondValue.replace(/\D/g, '').slice(-9).padStart(9, '0');
       const x = parseInt(coordDigits.slice(1, 5), 10);
       const y = parseInt(coordDigits.slice(5, 9), 10);
+      const prosperityValue = Number(row[3]);
 
       return {
         x: Number.isNaN(x) ? null : x,
         y: Number.isNaN(y) ? null : y,
         name: row[8] ?? '',
         union_id: row[33] ?? null,
+        prosperity: Number.isFinite(prosperityValue) ? prosperityValue : null,
       };
     }
 
@@ -257,27 +385,32 @@
 
      const div = document.createElement('div');
      div.className = 'result';
-      const htmlParts = [`<div style="margin-bottom:10px;color:#666;font-size:14px;">搜索结果（共${matchedItems.length}人）</div>`];
-
-     for (let i = 0; i < matchedItems.length; i++) {
-       const { item, indices } = matchedItems[i];
-       const uname = getUnionName(item);
-       if (i > 0) {
-          htmlParts.push(`<div style="height:1px;background:#eee;margin:6px 0;"></div>`);
-       }
-        htmlParts.push(`<div class="result-line"><span class="label">名称</span><span class="value">${highlightName(item.name, indices)}</span></div>`);
-        htmlParts.push(`<div class="result-line"><span class="label">坐标</span><span class="value">(${item.x},${item.y})</span></div>`);
-        htmlParts.push(`<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`);
-     }
-
-      div.innerHTML = htmlParts.join('');
+      const rows = matchedItems.map(({ item, indices }) => {
+        const uname = getUnionName(item);
+        const prosperity = item.prosperity === null ? '-' : item.prosperity;
+        return `
+          <tr>
+            <td>${highlightName(item.name, indices)}</td>
+            <td class="coord">(${item.x},${item.y})</td>
+            <td class="union">${uname}</td>
+            <td class="prosperity">${prosperity}</td>
+          </tr>
+        `;
+      }).map((html, index) => ({
+        html,
+        name: matchedItems[index].item.name,
+        x: matchedItems[index].item.x,
+        y: matchedItems[index].item.y,
+        prosperity: matchedItems[index].item.prosperity,
+      }));
+      div.innerHTML = renderTable(rows, `搜索结果（共${matchedItems.length}人）`);
 
      resultArea.appendChild(div);
     }
 
     searchInput.addEventListener('input', () => searchPerson(searchInput.value.trim()));
 
-    // === Tab 2: 找个最近的敌对创飞 ===
+    // === Tab 2: 找个敌对创飞 ===
     function populateUnionSelect() {
       const hasNullUnion = data.some(d => d.union_id === null || d.union_id === undefined);
       const sorted = Object.entries(unionMap)
@@ -299,15 +432,12 @@
    function searchEnemy() {
       enemyResultArea.innerHTML = '';
       const unionKey = enemyUnionSelect.value;
-      const x = parseFloat(targetX.value);
-      const y = parseFloat(targetY.value);
 
       if (!unionKey) {
         enemyResultArea.innerHTML = '<div class="no-result">请选择一个盟</div>';
         return;
       }
-      let candidates, hasCoord;
-      hasCoord = !isNaN(x) && !isNaN(y);
+      let candidates;
 
       if (unionKey === '__null__') {
         candidates = data.filter(d => d.union_id === null);
@@ -320,41 +450,43 @@
         return;
       }
 
-      let resultData;
-      if (hasCoord) {
-        resultData = candidates.map(d => ({
-          ...d,
-          dist: Math.sqrt((d.x - x) ** 2 + (d.y - y) ** 2),
-        }));
-        resultData.sort((a, b) => a.dist - b.dist);
-      } else {
-        resultData = candidates.map(d => ({ ...d, dist: null }));
-      }
-
       const uname = unionKey === '__null__' ? '无' : (unionMap[unionKey] || '未知');
-      const subtitle = hasCoord ? `（共${resultData.length}人，按距离排序）` : `（共${resultData.length}人）`;
+      const subtitle = `（共${candidates.length}人）`;
 
      const div = document.createElement('div');
      div.className = 'result';
-      const htmlParts = [`<div style="margin-bottom:10px;color:#666;font-size:14px;">${uname}${subtitle}</div>`];
-
-      for (let i = 0; i < resultData.length; i++) {
-       const d = resultData[i];
-       if (i > 0) {
-          htmlParts.push(`<div style="height:1px;background:#eee;margin:6px 0;"></div>`);
-       }
-        htmlParts.push(`<div class="result-line"><span class="label">名称</span><span class="value">${d.name}</span></div>`);
-        htmlParts.push(`<div class="result-line"><span class="label">坐标</span><span class="value">(${d.x},${d.y})</span></div>`);
-       if (hasCoord) {
-          htmlParts.push(`<div class="result-line"><span class="label">距离</span><span class="value">${d.dist.toFixed(1)}</span></div>`);
-       }
-        htmlParts.push(`<div class="result-line"><span class="label">联盟</span><span class="value">${uname}</span></div>`);
-     }
-
-      div.innerHTML = htmlParts.join('');
+      const rows = candidates.map(d => {
+        const prosperity = d.prosperity === null ? '-' : d.prosperity;
+        return `
+          <tr>
+            <td>${d.name}</td>
+            <td class="coord">(${d.x},${d.y})</td>
+            <td class="union">${uname}</td>
+            <td class="prosperity">${prosperity}</td>
+          </tr>
+        `;
+      }).map((html, index) => ({
+        html,
+        name: candidates[index].name,
+        x: candidates[index].x,
+        y: candidates[index].y,
+        prosperity: candidates[index].prosperity,
+      }));
+      div.innerHTML = renderTable(rows, `${uname}${subtitle}`);
 
      enemyResultArea.appendChild(div);
     }
+
+    function handleResultTableClick(event) {
+      const header = event.target.closest('th[data-sort-key]');
+      if (!header) return;
+      setSortState(header.dataset.sortKey);
+      if (searchInput.value.trim()) searchPerson(searchInput.value.trim());
+      if (enemyUnionSelect.value) searchEnemy();
+    }
+
+    resultArea.addEventListener('click', handleResultTableClick);
+    enemyResultArea.addEventListener('click', handleResultTableClick);
 
     enemySearchBtn.addEventListener('click', searchEnemy);
     targetX.addEventListener('keydown', e => { if (e.key === 'Enter') searchEnemy(); });
