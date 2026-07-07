@@ -21,6 +21,10 @@ def jiexi(content):
 
     for i in range(len(r)):
         r[i] = re.sub(pattern, replacement, r[i])
+
+        # 2. 【新增】去除数字前导零（保留单独的 0）
+        #    匹配逗号或左括号后面的 0+数字，替换为去掉前导零的数字
+        r[i] = re.sub(r'(?<=[,\[])\s*0+(\d+)', r'\1', r[i])
         
         if(len(ast.literal_eval(r[i])) != 48):
             print(f"Skipping item with unexpected length: {r[i]}")
